@@ -122,6 +122,76 @@ Or run from source:
 | `production-readiness` | Full production audit scorecard |
 | `incident-response` | 4-phase incident response protocol |
 
+## Webhook Server (Sentry Alerts)
+
+Receive Sentry alert webhooks for automatic triage and auto-resolve. **Disabled by default.**
+
+Enable in your config:
+
+```json
+{
+  "webhook": {
+    "enabled": true,
+    "port": 3100,
+    "sentrySecret": "from-env",
+    "autoResolve": {
+      "enabled": true,
+      "categories": ["known_bug"],
+      "maxAutoResolvePerHour": 10
+    }
+  }
+}
+```
+
+Set the secret: `SENTRY_WEBHOOK_SECRET=your-secret`
+
+### Sentry Setup
+
+1. Go to **Sentry > Settings > Developer Settings > Internal Integration**
+2. Under Webhooks, set URL to `http://your-server:3100/webhooks/sentry`
+3. Copy the **Client Secret** and set as `SENTRY_WEBHOOK_SECRET` env var
+4. Enable **Issue Alerts** webhook
+5. Create alert rules (Project Settings > Alerts) that fire on new issues
+
+### Safety Rails
+
+- Never auto-resolves **critical** or **high** severity issues
+- Rate limited to 10 auto-resolves per hour (configurable)
+- HMAC-SHA256 signature verification on all webhooks
+- Known bugs marked `fixed: true` in config are eligible for auto-resolve
+
+### Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/webhooks/sentry` | Sentry alert webhook receiver |
+| GET | `/health` | Liveness probe (uptime, auto-resolve count) |
+
+## Periodic Health Checks
+
+Scheduled polling to detect issues proactively. **Disabled by default.**
+
+```json
+{
+  "periodicChecks": {
+    "enabled": true,
+    "intervalMinutes": 15,
+    "checks": ["outbox_health", "error_spike", "dead_letters"],
+    "notifyUrl": "https://hooks.slack.com/services/..."
+  }
+}
+```
+
+### Available Checks
+
+| Check | Description | Requires |
+|-------|-------------|----------|
+| `outbox_health` | Pending queue depth, dead letters, stuck leases | `DATABASE_URL` |
+| `error_spike` | High-frequency issues across Sentry projects | `SENTRY_AUTH_TOKEN` |
+| `dead_letters` | Events that have failed max retry attempts | `DATABASE_URL` |
+
+Results are logged to stderr. If `notifyUrl` is set, warnings and critical results are posted (Slack-compatible format).
+
 ## Configuration
 
 The agent ships with Lucid platform defaults (`config/lucid.json`). Override by setting `AGENT_CONFIG_PATH`:
@@ -130,34 +200,12 @@ The agent ships with Lucid platform defaults (`config/lucid.json`). Override by 
 AGENT_CONFIG_PATH=./my-config.json npx lucid-observability-agent
 ```
 
-See `config/example.json` for a minimal config template. The config schema:
-
-```typescript
-interface AgentConfig {
-  platform: { name: string; envVar: string }
-  sentry: { defaultOrg: string; projects: string[] }
-  services: Record<string, {
-    repo: string; runtime: string; framework: string; sentryProject: string
-  }>
-  conventions: {
-    spanNames: Record<string, string>
-    attributeKeys: Record<string, { description: string; pii: boolean; highCardinality: boolean }>
-    rules: string[]
-  }
-  dependencies: Record<string, string[]>
-  traceFlow: string[]
-  sampling: Record<string, number>
-  runbooks: Record<string, RunbookPhase>
-  diagnosisPatterns: DiagnosisPattern[]
-  knownBugs: KnownBug[]
-  metering: { outboxTable: string; deadLetterThreshold: number; queueDepthThreshold: number }
-}
-```
+See `config/example.json` for a minimal config template.
 
 ## Development
 
 ```bash
-git clone https://github.com/raijin-labs/lucid-observability-agent
+git clone https://github.com/daishizenSensei/lucid-observability-agent
 cd lucid-observability-agent
 npm install
 npm run typecheck   # Verify types

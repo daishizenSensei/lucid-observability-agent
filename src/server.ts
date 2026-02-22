@@ -24,7 +24,7 @@ async function main() {
 
   const server = new McpServer({
     name: 'lucid-observability-agent',
-    version: '2.0.0',
+    version: '2.1.0',
   })
 
   // Register all tool groups
@@ -38,10 +38,26 @@ async function main() {
   registerResources(server, config)
   registerPrompts(server, config)
 
-  // Start on stdio transport
+  // Start on stdio transport (always — this is the MCP transport)
   const { StdioServerTransport } = await import('@modelcontextprotocol/sdk/server/stdio.js')
   const transport = new StdioServerTransport()
   await server.connect(transport)
+
+  // Optional: Webhook server for Sentry alerts
+  if (config.webhook.enabled) {
+    const { startWebhookServer } = await import('./webhook.js')
+    const httpServer = await startWebhookServer(config)
+    process.on('SIGTERM', () => httpServer.close())
+    process.on('SIGINT', () => httpServer.close())
+  }
+
+  // Optional: Periodic health checks
+  if (config.periodicChecks.enabled) {
+    const { startScheduler } = await import('./scheduler.js')
+    const scheduler = startScheduler(config)
+    process.on('SIGTERM', () => scheduler.stop())
+    process.on('SIGINT', () => scheduler.stop())
+  }
 }
 
 main().catch((e) => {

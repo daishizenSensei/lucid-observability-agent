@@ -113,7 +113,7 @@ export function registerDiagnosisTools(server: McpServer, config: AgentConfig) {
 
 /* ─── Diagnosis Engine ────────────────────────────────── */
 
-interface DiagnosisInput {
+export interface DiagnosisInput {
   title: string; culprit: string; count: number; userCount: number
   level: string; stacktrace: string[]
   breadcrumbs: Array<{ timestamp: string; category: string; message: string }>
@@ -121,7 +121,7 @@ interface DiagnosisInput {
   firstSeen: string; lastSeen: string; project: string
 }
 
-function buildDiagnosis(config: AgentConfig, input: DiagnosisInput) {
+export function buildDiagnosis(config: AgentConfig, input: DiagnosisInput) {
   const title = input.title.toLowerCase()
   const culprit = input.culprit.toLowerCase()
   const stack = input.stacktrace.join('\n').toLowerCase()

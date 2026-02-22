@@ -235,5 +235,22 @@
     "outboxTable": "openmeter_event_ledger",
     "deadLetterThreshold": 10,
     "queueDepthThreshold": 500
+  },
+  "webhook": {
+    "enabled": false,
+    "port": 3100,
+    "host": "0.0.0.0",
+    "sentrySecret": "from-env",
+    "autoResolve": {
+      "enabled": true,
+      "categories": ["known_bug"],
+      "maxAutoResolvePerHour": 10
+    }
+  },
+  "periodicChecks": {
+    "enabled": false,
+    "intervalMinutes": 15,
+    "checks": ["outbox_health", "error_spike", "dead_letters"],
+    "notifyUrl": null
   }
 }

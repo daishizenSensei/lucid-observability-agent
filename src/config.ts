@@ -53,6 +53,25 @@ export interface KnownBug {
   fixed: boolean
 }
 
+export interface WebhookConfig {
+  enabled: boolean
+  port: number
+  host: string
+  sentrySecret: string
+  autoResolve: {
+    enabled: boolean
+    categories: string[]
+    maxAutoResolvePerHour: number
+  }
+}
+
+export interface PeriodicChecksConfig {
+  enabled: boolean
+  intervalMinutes: number
+  checks: string[]
+  notifyUrl: string | null
+}
+
 export interface AgentConfig {
   platform: {
     name: string
@@ -79,6 +98,8 @@ export interface AgentConfig {
     deadLetterThreshold: number
     queueDepthThreshold: number
   }
+  webhook: WebhookConfig
+  periodicChecks: PeriodicChecksConfig
 }
 
 /* ─── Minimal built-in defaults ───────────────────────── */
@@ -95,6 +116,19 @@ const MINIMAL_DEFAULTS: AgentConfig = {
   diagnosisPatterns: [],
   knownBugs: [],
   metering: { outboxTable: 'openmeter_event_ledger', deadLetterThreshold: 10, queueDepthThreshold: 500 },
+  webhook: {
+    enabled: false,
+    port: 3100,
+    host: '0.0.0.0',
+    sentrySecret: '',
+    autoResolve: { enabled: false, categories: ['known_bug'], maxAutoResolvePerHour: 10 },
+  },
+  periodicChecks: {
+    enabled: false,
+    intervalMinutes: 15,
+    checks: ['outbox_health', 'error_spike', 'dead_letters'],
+    notifyUrl: null,
+  },
 }
 
 /* ─── Loader ──────────────────────────────────────────── */

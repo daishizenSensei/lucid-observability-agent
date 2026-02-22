@@ -150,3 +150,21 @@ export function detectTemporalPattern(timestamps: string[]): {
 
   return { pattern: 'sporadic', description: `Sporadic: ${times.length} events over ${spanHours.toFixed(1)}h with irregular intervals` }
 }
+
+/* ─── Sentry Issue Resolution ────────────────────────── */
+
+export async function resolveIssue(
+  config: AgentConfig,
+  issueId: string,
+  action: 'resolve' | 'ignore' = 'resolve',
+  ignoreDuration?: number,
+): Promise<{ success: boolean; action: string; issueId: string }> {
+  let body: Record<string, unknown>
+  if (action === 'resolve') body = { status: 'resolved' }
+  else body = ignoreDuration
+    ? { status: 'ignored', statusDetails: { ignoreDuration } }
+    : { status: 'ignored' }
+
+  await sentryFetch(config, `/issues/${issueId}/`, { method: 'PUT', body })
+  return { success: true, action, issueId }
+}
