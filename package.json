@@ -16,7 +16,9 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/server.js",
+    "start:service": "node dist/service.js",
     "dev": "npx tsx src/server.ts",
+    "dev:service": "npx tsx src/service.ts",
     "typecheck": "tsc --noEmit"
   },
   "keywords": [
