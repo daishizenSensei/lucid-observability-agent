@@ -1,0 +1,54 @@
+{
+  "name": "lucid-observability-agent",
+  "version": "2.0.0",
+  "description": "MCP server for monitoring, diagnosing, and auto-correcting observability issues — Sentry, OTel, OpenMeter",
+  "type": "module",
+  "main": "dist/server.js",
+  "bin": {
+    "lucid-observability-agent": "dist/server.js"
+  },
+  "files": [
+    "dist",
+    "config",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "dev": "npx tsx src/server.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "observability",
+    "sentry",
+    "opentelemetry",
+    "otel",
+    "openmeter",
+    "monitoring",
+    "incident-response",
+    "diagnosis",
+    "auto-correction"
+  ],
+  "author": "Raijin Labs",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/daishizenSensei/lucid-observability-agent"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "pg": "^8.13.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.11.10",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}

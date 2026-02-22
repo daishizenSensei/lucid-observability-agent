@@ -1,0 +1,59 @@
+{
+  "platform": {
+    "name": "myapp",
+    "envVar": "NODE_ENV"
+  },
+  "sentry": {
+    "defaultOrg": "my-org",
+    "projects": ["myapp-web", "myapp-api"]
+  },
+  "services": {
+    "myapp-web": {
+      "repo": "myapp",
+      "runtime": "Vercel",
+      "framework": "Next.js",
+      "sentryProject": "myapp-web"
+    },
+    "myapp-api": {
+      "repo": "myapp",
+      "runtime": "Railway",
+      "framework": "Express",
+      "sentryProject": "myapp-api"
+    }
+  },
+  "conventions": {
+    "spanNames": {
+      "api.request": "Inbound API request",
+      "db.query": "Database query"
+    },
+    "attributeKeys": {
+      "myapp.user_id": { "description": "User ID", "pii": false, "highCardinality": true },
+      "myapp.tenant_id": { "description": "Tenant ID", "pii": false, "highCardinality": true }
+    },
+    "rules": [
+      "All identity attributes must be hashed before telemetry",
+      "Never include request/response bodies in span attributes"
+    ]
+  },
+  "dependencies": {
+    "myapp-web": ["myapp-api", "Supabase"],
+    "myapp-api": ["Supabase", "Redis"]
+  },
+  "traceFlow": [
+    "myapp-web → myapp-api → Database"
+  ],
+  "sampling": {
+    "production": 0.1,
+    "staging": 1.0,
+    "development": 1.0,
+    "test": 0.0
+  },
+  "runbooks": {},
+  "diagnosisPatterns": [],
+  "knownBugs": [],
+  "metering": {
+    "outboxTable": "metering_events",
+    "deadLetterThreshold": 10,
+    "queueDepthThreshold": 500
+  }
+}

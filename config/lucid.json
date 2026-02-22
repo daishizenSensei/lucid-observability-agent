@@ -1,0 +1,239 @@
+{
+  "platform": {
+    "name": "lucid",
+    "envVar": "LUCID_ENV"
+  },
+  "sentry": {
+    "defaultOrg": "raijin-labs",
+    "projects": ["lucid-web", "lucid-worker", "lucid-l2", "lucid-trustgate", "lucid-mcpgate", "javascript-nextjs"]
+  },
+  "services": {
+    "lucid-web": { "repo": "LucidMerged", "runtime": "Vercel", "framework": "Next.js", "sentryProject": "javascript-nextjs" },
+    "lucid-worker": { "repo": "LucidMerged", "runtime": "Railway", "framework": "Node/Fastify", "sentryProject": "lucid-worker" },
+    "lucid-l2": { "repo": "Lucid-L2", "runtime": "Railway", "framework": "Express", "sentryProject": "lucid-l2" },
+    "lucid-trustgate": { "repo": "lucid-plateform-core", "runtime": "Railway", "framework": "Fastify", "sentryProject": "lucid-trustgate" },
+    "lucid-mcpgate": { "repo": "lucid-plateform-core", "runtime": "Railway", "framework": "Fastify", "sentryProject": "lucid-mcpgate" },
+    "lucid-control-plane": { "repo": "lucid-plateform-core", "runtime": "Railway", "framework": "Fastify", "sentryProject": "lucid-control-plane" }
+  },
+  "conventions": {
+    "spanNames": {
+      "inbound.pipeline": "Full inbound message pipeline: dedup → lock → rate limit → LLM → encrypt → store",
+      "llm.call": "Single LLM provider invocation",
+      "tool.execute": "Single tool execution",
+      "encrypt.message": "Message encryption",
+      "memory.extract": "Memory extraction pipeline",
+      "trustgate.chat_completion": "TrustGate chat completion request",
+      "trustgate.embedding": "TrustGate embedding request",
+      "trustgate.llm_proxy": "TrustGate LLM proxy call to LiteLLM",
+      "mcpgate.tool_discover": "MCPGate tool discovery",
+      "mcpgate.tool_execute": "MCPGate tool execution",
+      "mcpgate.server_health": "MCPGate server health check",
+      "auth.verify": "API key / auth verification",
+      "quota.check": "Quota enforcement check",
+      "policy.check": "Policy enforcement check",
+      "metering.insert": "Metering event insertion",
+      "outbound.deliver": "Outbound message delivery",
+      "l2.proxy.call": "HTTP request to Lucid-L2 gateway",
+      "db.query": "Database query (Supabase)",
+      "rate_limit.check": "Rate limiter check",
+      "dedup.check": "Deduplication check"
+    },
+    "attributeKeys": {
+      "lucid.tenant_key_hash": { "description": "Hashed tenant key", "pii": true, "highCardinality": false },
+      "lucid.session_key_hash": { "description": "Hashed session key", "pii": true, "highCardinality": false },
+      "lucid.user_key_hash": { "description": "Hashed user key", "pii": true, "highCardinality": false },
+      "lucid.run_id": { "description": "Run ID (UUID)", "pii": false, "highCardinality": true },
+      "lucid.conversation_id": { "description": "Conversation ID", "pii": false, "highCardinality": true },
+      "lucid.message_id": { "description": "Message ID", "pii": false, "highCardinality": true },
+      "lucid.llm.provider": { "description": "LLM provider name", "pii": false, "highCardinality": false },
+      "lucid.llm.model": { "description": "LLM model name", "pii": false, "highCardinality": false },
+      "lucid.llm.prompt_tokens": { "description": "Prompt token count", "pii": false, "highCardinality": false },
+      "lucid.llm.completion_tokens": { "description": "Completion token count", "pii": false, "highCardinality": false },
+      "lucid.llm.total_tokens": { "description": "Total token count", "pii": false, "highCardinality": false },
+      "lucid.tool.name": { "description": "Tool name", "pii": false, "highCardinality": false },
+      "lucid.tool.duration_ms": { "description": "Tool duration ms", "pii": false, "highCardinality": false },
+      "lucid.tenant_id": { "description": "Tenant UUID", "pii": false, "highCardinality": true },
+      "lucid.service": { "description": "Canonical service name", "pii": false, "highCardinality": false },
+      "lucid.environment": { "description": "Environment name", "pii": false, "highCardinality": false },
+      "http.method": { "description": "HTTP method", "pii": false, "highCardinality": false },
+      "http.route": { "description": "HTTP route pattern", "pii": false, "highCardinality": false },
+      "http.status_code": { "description": "HTTP status code", "pii": false, "highCardinality": false }
+    },
+    "rules": [
+      "Identity keys (tenant_key, session_key, user_key) MUST be hashed via hashForTelemetry()",
+      "UUIDs (run_id, conversation_id, message_id) are OK raw — NOT PII",
+      "UUIDs are HIGH CARDINALITY — NEVER use as metric labels",
+      "Content (plaintext, ciphertext, prompts, tool args) is NEVER an attribute",
+      "Use LUCID_ENV not NODE_ENV for environment detection",
+      "All services use head + tail sampling: head captures baseline, tail captures 100% errors"
+    ]
+  },
+  "dependencies": {
+    "lucid-web": ["lucid-worker", "lucid-l2", "Supabase", "Privy"],
+    "lucid-worker": ["lucid-l2", "Supabase", "Redis"],
+    "lucid-l2": ["Supabase", "Nango", "Redis"],
+    "lucid-trustgate": ["LiteLLM", "Supabase", "OpenMeter"],
+    "lucid-mcpgate": ["MCP Servers", "Supabase", "OpenMeter"],
+    "lucid-control-plane": ["Supabase"]
+  },
+  "traceFlow": [
+    "lucid-web → lucid-worker → lucid-l2 (via lucid-trustgate) → LLM Provider",
+    "lucid-web → lucid-worker → lucid-mcpgate → MCP Server",
+    "All internal hops propagate W3C Trace Context (traceparent header)",
+    "External hops (to LLM providers, MCP servers) do NOT propagate trace context"
+  ],
+  "sampling": {
+    "production": 0.1,
+    "staging": 1.0,
+    "development": 1.0,
+    "test": 0.0
+  },
+  "runbooks": {
+    "network_error": {
+      "title": "Network / Provider Connectivity Failure",
+      "severity": "HIGH",
+      "triage": ["Check Sentry error volume trend", "Identify affected provider from stack trace", "Check provider status page"],
+      "diagnose": ["Use sentry_get_issue for full stack trace", "Use cross_correlate to check cascade", "Check error type: ECONNREFUSED (down) vs ENOTFOUND (DNS) vs ETIMEDOUT (network)"],
+      "mitigate": ["Verify LLM fallback routing is working", "Check egress network connectivity", "Enable circuit breaker if error rate > 50%"],
+      "resolve": ["Wait for provider recovery if external", "Fix DNS/network config if internal", "Update fallback routes"],
+      "postmortem": ["Document incident timeline", "Verify alert rules caught the issue", "Review retry/circuit breaker logic"]
+    },
+    "timeout": {
+      "title": "Request Timeout / AbortError",
+      "severity": "MEDIUM-HIGH",
+      "triage": ["Check if LLM calls or other operations", "Check timeout values", "Check correlation with load"],
+      "diagnose": ["Check stack trace for timeout source", "Check span durations in OTel", "For DB: check pool usage"],
+      "mitigate": ["Switch to streaming for LLM calls", "Increase pool size for DB", "Add request queuing"],
+      "resolve": ["Increase timeout for slow operations", "Optimize the slow operation", "Add caching"],
+      "postmortem": ["Review all timeout values", "Add latency percentile monitoring", "Set up p99 alerts"]
+    },
+    "auth_error": {
+      "title": "Authentication / Authorization Failure",
+      "severity": "HIGH",
+      "triage": ["Check if all tenants or specific ones", "Check Sentry tags for tenant_id", "Check if started after deployment"],
+      "diagnose": ["Check API key validity", "Verify auth configuration", "Check 401 vs 403"],
+      "mitigate": ["Rollback keys if rotation issue", "Regenerate affected tenant keys"],
+      "resolve": ["Fix root cause", "Verify with test request", "Notify affected tenants"],
+      "postmortem": ["Add key expiry monitoring", "Set up auth error rate alerts", "Document key rotation procedure"]
+    },
+    "rate_limit": {
+      "title": "Rate Limit / Quota Exceeded",
+      "severity": "MEDIUM",
+      "triage": ["Check tenant-level vs provider-level", "Use openmeter_usage_by_org", "Check for 429 responses"],
+      "diagnose": ["Use openmeter_usage_anomaly for spikes", "Check single org vs distributed", "Review quota.check spans"],
+      "mitigate": ["Increase quota for legitimate users", "Enable request queuing", "Switch to higher-limit provider"],
+      "resolve": ["Adjust quotas to match plans", "Add rate limiting at gateway", "Configure fallback routing"],
+      "postmortem": ["Review quota settings", "Add 80% usage alerts", "Document quota management"]
+    },
+    "database_error": {
+      "title": "Database Connectivity / Query Error",
+      "severity": "CRITICAL",
+      "triage": ["Check database dashboard", "Check if all services affected", "Check connection pool metrics"],
+      "diagnose": ["Check error type: connection, timeout, constraint", "Use openmeter_outbox_health", "Check migrations"],
+      "mitigate": ["Restart service to reset connections", "Enable read-only/cached mode", "Kill long-running queries"],
+      "resolve": ["Fix pool config", "Optimize slow queries", "Apply missing migrations"],
+      "postmortem": ["Add pool monitoring", "Set up 80% utilization alerts", "Review query budget"]
+    },
+    "validation_error": {
+      "title": "Request Validation / Schema Error",
+      "severity": "LOW-MEDIUM",
+      "triage": ["Check client bug vs schema change", "Check failing endpoint/field", "Check if started after deployment"],
+      "diagnose": ["Check validation error details", "Compare payload vs schema", "Check client/server sync"],
+      "mitigate": ["Return detailed errors", "Deploy client fix", "Add backwards compat"],
+      "resolve": ["Fix schema mismatch", "Add integration tests", "Consider API versioning"],
+      "postmortem": ["Add API contract testing to CI", "Review deployment order"]
+    },
+    "metering_failure": {
+      "title": "OpenMeter / Billing Metering Failure",
+      "severity": "HIGH",
+      "triage": ["Use openmeter_outbox_health", "Check OpenMeter API status", "Check outbox worker"],
+      "diagnose": ["Check dead letter errors", "Verify API key", "Check timeout config", "Check stuck leases"],
+      "mitigate": ["Use openmeter_dead_letter_retry", "Restart outbox worker", "Events stored in ledger — no data loss"],
+      "resolve": ["Fix API connectivity", "Fix timeout config", "Retry dead letters", "Verify billing totals"],
+      "postmortem": ["Add outbox depth alert (pending > 500)", "Add dead letter alert", "Verify 3-transaction pattern"]
+    },
+    "provider_outage": {
+      "title": "LLM Provider Outage",
+      "severity": "HIGH",
+      "triage": ["Check provider status pages", "Check which providers failing", "Use cross_correlate for cascade"],
+      "diagnose": ["Identify affected providers", "Check fallback routing", "Check regional vs global"],
+      "mitigate": ["Auto-route to fallback providers", "Enable degraded mode", "Communicate to tenants"],
+      "resolve": ["Monitor recovery", "Verify all requests completing", "Check data consistency"],
+      "postmortem": ["Document failure modes", "Verify fallback coverage", "Consider local model fallback"]
+    },
+    "memory_leak": {
+      "title": "Memory Leak / OOM",
+      "severity": "CRITICAL",
+      "triage": ["Check for OOM kills in logs", "Check restart frequency", "Check heap usage"],
+      "diagnose": ["Take heap snapshot", "Check for unbounded caches, listener leaks", "Check correlation with requests"],
+      "mitigate": ["Restart service", "Increase memory limit", "Set --max-old-space-size"],
+      "resolve": ["Fix the memory leak", "Add memory monitoring", "Add graceful shutdown on threshold"],
+      "postmortem": ["Add memory metric to OTel", "Alert on memory > 80%", "Add periodic heap snapshots"]
+    },
+    "deployment_regression": {
+      "title": "Post-Deployment Regression",
+      "severity": "HIGH",
+      "triage": ["Check Sentry for regression-flagged issues", "Compare error rates pre/post deploy", "Check release tag"],
+      "diagnose": ["Use sentry_project_stats for rate comparison", "Check new errors after release", "Review deployment diff"],
+      "mitigate": ["Rollback if elevated rate", "Disable via feature flag", "Hotfix and redeploy"],
+      "resolve": ["Fix regression", "Add test coverage", "Deploy and verify"],
+      "postmortem": ["Add canary deployment", "Add automated error rate CI check", "Improve test coverage"]
+    }
+  },
+  "diagnosisPatterns": [
+    {
+      "category": "litellm_timeout",
+      "keywords": ["litellm", "timeout", "llm proxy"],
+      "rootCause": "LLM provider timeout via LiteLLM — check provider status and fallback routing",
+      "suggestions": [
+        { "action": "check_litellm", "description": "Verify LiteLLM fallback routes", "confidence": "high" },
+        { "action": "use_streaming", "description": "Switch to streaming to avoid long connections", "confidence": "high" }
+      ],
+      "relatedPatterns": ["Provider degradation", "Model overload"]
+    },
+    {
+      "category": "openmeter_timeout",
+      "keywords": ["openmeter", "metering", "outbox", "aborterror"],
+      "rootCause": "OpenMeter API timeout — verify timeout is 5000ms (known 30ms bug existed)",
+      "suggestions": [
+        { "action": "check_timeout", "description": "Verify OpenMeter client timeoutMs = 5000 (was 30ms)", "confidence": "high", "command": "check_config_health" },
+        { "action": "check_outbox", "description": "Use openmeter_outbox_health to check queue", "confidence": "high", "command": "openmeter_outbox_health" }
+      ],
+      "relatedPatterns": ["Timeout misconfiguration", "API connectivity"]
+    },
+    {
+      "category": "privy_auth",
+      "keywords": ["privy", "auth.privy.io"],
+      "rootCause": "Privy authentication failure — check Privy app config and service status",
+      "suggestions": [
+        { "action": "check_privy", "description": "Verify NEXT_PUBLIC_PRIVY_APP_ID and Privy status", "confidence": "high" }
+      ],
+      "relatedPatterns": ["Third-party auth outage", "Config drift"]
+    },
+    {
+      "category": "mcp_server_down",
+      "keywords": ["mcp", "tool_execute", "econnrefused", "mcp server"],
+      "rootCause": "MCP server unreachable — check MCP server health and registry",
+      "suggestions": [
+        { "action": "check_mcp_health", "description": "Check MCP server health endpoint", "confidence": "high" },
+        { "action": "check_registry", "description": "Verify server is registered in MCPGate", "confidence": "medium" }
+      ],
+      "relatedPatterns": ["Server crash", "Registry stale"]
+    }
+  ],
+  "knownBugs": [
+    {
+      "id": "openmeter-30ms",
+      "title": "OpenMeter client 30ms timeout",
+      "keywords": ["openmeter", "aborterror", "timeout", "30"],
+      "description": "The OpenMeter client had timeoutMs=30 instead of 5000, causing silent AbortErrors in production",
+      "fix": "Fixed in packages/metering/src/client.ts — verify timeoutMs=5000",
+      "fixed": true
+    }
+  ],
+  "metering": {
+    "outboxTable": "openmeter_event_ledger",
+    "deadLetterThreshold": 10,
+    "queueDepthThreshold": 500
+  }
+}
