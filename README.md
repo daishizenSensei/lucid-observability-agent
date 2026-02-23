@@ -1,32 +1,36 @@
 # Lucid Observability Agent
 
-MCP server for monitoring, diagnosing, and auto-correcting observability issues across platform services. Connects to **Sentry** for error tracking, **PostgreSQL** for OpenMeter billing pipeline health, and ships with AI-powered diagnosis, incident runbooks, and cross-service correlation.
+MCP server **and** OpenClaw plugin for monitoring, diagnosing, and auto-correcting observability issues across platform services. Connects to **Sentry** for error tracking, **PostgreSQL** for OpenMeter billing pipeline health, and ships with AI-powered diagnosis, incident runbooks, and cross-service correlation.
 
 Unlike the official Sentry MCP server (which is a pure API wrapper), this agent adds:
 
-- **Root cause analysis** — pattern matching against error titles, stack traces, and platform-specific knowledge
-- **Cross-service correlation** — traces errors across multiple services via `trace_id` / `run_id`
-- **Billing pipeline monitoring** — outbox health, dead letter recovery, usage anomaly detection
-- **Incident runbooks** — 10 error categories with 5-phase playbooks (triage → diagnose → mitigate → resolve → postmortem)
-- **Alert rule generation** — suggests Sentry alert rules based on actual error patterns
-- **Production readiness auditing** — validates env vars, conventions, and configuration
+- **Root cause analysis** --- pattern matching against error titles, stack traces, and platform-specific knowledge
+- **Cross-service correlation** --- traces errors across multiple services via `trace_id` / `run_id`
+- **Billing pipeline monitoring** --- outbox health, dead letter recovery, usage anomaly detection
+- **Incident runbooks** --- 10 error categories with 5-phase playbooks (triage -> diagnose -> mitigate -> resolve -> postmortem)
+- **Alert rule generation** --- suggests Sentry alert rules based on actual error patterns
+- **Production readiness auditing** --- validates env vars, conventions, and configuration
+
+> **v3.0.0** --- Dual entry point architecture: works as both an MCP server (Claude Code / Claude Desktop) and an OpenClaw plugin with slash commands and heartbeat support.
 
 ## Quick Start
 
+### As MCP Server (Claude Code)
+
+Install from npm and run directly:
+
 ```bash
-npm install lucid-observability-agent
+npx lucid-obs-agent
 ```
 
-### Claude Desktop / Claude Code
-
-Add to your MCP config (`~/.claude.json` or Claude Desktop settings):
+Or add to your MCP config (`~/.claude.json` or Claude Desktop settings):
 
 ```json
 {
   "mcpServers": {
     "observability": {
       "command": "npx",
-      "args": ["lucid-observability-agent"],
+      "args": ["lucid-obs-agent"],
       "env": {
         "SENTRY_AUTH_TOKEN": "sntrys_...",
         "SENTRY_ORG": "your-org",
@@ -44,7 +48,7 @@ Or run from source:
   "mcpServers": {
     "observability": {
       "command": "npx",
-      "args": ["tsx", "/path/to/lucid-observability-agent/src/server.ts"],
+      "args": ["tsx", "/path/to/lucid-observability-agent/src/bin.ts"],
       "env": {
         "SENTRY_AUTH_TOKEN": "sntrys_...",
         "DATABASE_URL": "postgresql://..."
@@ -53,6 +57,34 @@ Or run from source:
   }
 }
 ```
+
+### As OpenClaw Plugin
+
+1. Install the package:
+
+```bash
+npm install lucid-observability-agent
+```
+
+2. Add to your `openclaw.json`:
+
+```json
+{
+  "plugins": [
+    {
+      "id": "lucid-observability",
+      "package": "lucid-observability-agent",
+      "config": {
+        "sentryAuthToken": "sntrys_...",
+        "sentryOrg": "your-org",
+        "databaseUrl": "postgresql://..."
+      }
+    }
+  ]
+}
+```
+
+The plugin registers all 16 tools, 3 resources, 3 prompts, and 2 slash commands automatically.
 
 ## Environment Variables
 
@@ -122,82 +154,47 @@ Or run from source:
 | `production-readiness` | Full production audit scorecard |
 | `incident-response` | 4-phase incident response protocol |
 
-## Webhook Server (Sentry Alerts)
+These prompts are also documented with full workflows in [`SKILL.md`](skills/lucid-observability/SKILL.md).
 
-Receive Sentry alert webhooks for automatic triage and auto-resolve. **Disabled by default.**
+## Commands (OpenClaw)
 
-Enable in your config:
+When running as an OpenClaw plugin, two slash commands are available:
 
-```json
-{
-  "webhook": {
-    "enabled": true,
-    "port": 3100,
-    "sentrySecret": "from-env",
-    "autoResolve": {
-      "enabled": true,
-      "categories": ["known_bug"],
-      "maxAutoResolvePerHour": 10
-    }
-  }
-}
+| Command | Description |
+|---------|-------------|
+| `/obs-status` | Show observability agent status --- config, services, connections |
+| `/obs-check` | Run observability health checks --- config audit + outbox health |
+
+## OpenClaw Heartbeat
+
+OpenClaw supports autonomous monitoring via a `HEARTBEAT.md` file. The agent runs the checks on a schedule and reports findings without manual prompting.
+
+Add a `HEARTBEAT.md` to your project root (or reference the checklist in `SKILL.md`):
+
+```markdown
+## Observability Checks
+- Run `openmeter_outbox_health` — alert if dead letters > 0 or stuck leases
+- Run `sentry_list_issues` sorted by freq — flag issues with count > 100
+- Run `check_config_health` — warn if any critical checks failing
+- If issues found, run `diagnose_issue` and suggest resolution
 ```
 
-Set the secret: `SENTRY_WEBHOOK_SECRET=your-secret`
-
-### Sentry Setup
-
-1. Go to **Sentry > Settings > Developer Settings > Internal Integration**
-2. Under Webhooks, set URL to `http://your-server:3100/webhooks/sentry`
-3. Copy the **Client Secret** and set as `SENTRY_WEBHOOK_SECRET` env var
-4. Enable **Issue Alerts** webhook
-5. Create alert rules (Project Settings > Alerts) that fire on new issues
-
-### Safety Rails
-
-- Never auto-resolves **critical** or **high** severity issues
-- Rate limited to 10 auto-resolves per hour (configurable)
-- HMAC-SHA256 signature verification on all webhooks
-- Known bugs marked `fixed: true` in config are eligible for auto-resolve
-
-### Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/webhooks/sentry` | Sentry alert webhook receiver |
-| GET | `/health` | Liveness probe (uptime, auto-resolve count) |
-
-## Periodic Health Checks
-
-Scheduled polling to detect issues proactively. **Disabled by default.**
-
-```json
-{
-  "periodicChecks": {
-    "enabled": true,
-    "intervalMinutes": 15,
-    "checks": ["outbox_health", "error_spike", "dead_letters"],
-    "notifyUrl": "https://hooks.slack.com/services/..."
-  }
-}
-```
-
-### Available Checks
-
-| Check | Description | Requires |
-|-------|-------------|----------|
-| `outbox_health` | Pending queue depth, dead letters, stuck leases | `DATABASE_URL` |
-| `error_spike` | High-frequency issues across Sentry projects | `SENTRY_AUTH_TOKEN` |
-| `dead_letters` | Events that have failed max retry attempts | `DATABASE_URL` |
-
-Results are logged to stderr. If `notifyUrl` is set, warnings and critical results are posted (Slack-compatible format).
+The heartbeat runs these checks periodically and surfaces warnings or critical findings through OpenClaw's notification system.
 
 ## Configuration
 
 The agent ships with Lucid platform defaults (`config/lucid.json`). Override by setting `AGENT_CONFIG_PATH`:
 
 ```bash
-AGENT_CONFIG_PATH=./my-config.json npx lucid-observability-agent
+AGENT_CONFIG_PATH=./my-config.json npx lucid-obs-agent
+```
+
+When using the OpenClaw plugin, pass the config path via plugin config:
+
+```json
+{
+  "configPath": "./config/my-config.json"
+}
 ```
 
 See `config/example.json` for a minimal config template.
@@ -210,7 +207,25 @@ cd lucid-observability-agent
 npm install
 npm run typecheck   # Verify types
 npm run dev         # Start with tsx (hot reload)
-npm run build       # Build to dist/
+npm run build       # Build with tsup to dist/
+npm run start       # Run built output
+```
+
+### Project Structure
+
+```
+src/
+  bin.ts            # CLI entry point (MCP stdio server)
+  index.ts          # Package re-export (core + mcp + openclaw)
+  mcp.ts            # MCP server setup (tools, resources, prompts)
+  openclaw.ts       # OpenClaw plugin entry (tools, commands, skills)
+  core/
+    tools/          # 16 tool definitions (ToolParamDef format)
+    resources/      # 3 resource data providers
+    commands/       # /obs-status, /obs-check handlers
+    config/         # Config loading and defaults
+    helpers/        # Sentry API, DB client, shared utils
+    types/          # TypeScript type definitions
 ```
 
 ## License
