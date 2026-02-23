@@ -31,19 +31,3 @@ export async function sentryFetch(
   }
   return res.json();
 }
-
-export async function resolveIssue(
-  config: AgentConfig,
-  issueId: string,
-  action: 'resolve' | 'ignore' = 'resolve',
-  ignoreDuration?: number,
-): Promise<{ success: boolean; action: string; issueId: string }> {
-  let body: Record<string, unknown>;
-  if (action === 'resolve') body = { status: 'resolved' };
-  else body = ignoreDuration
-    ? { status: 'ignored', statusDetails: { ignoreDuration } }
-    : { status: 'ignored' };
-
-  await sentryFetch(config, `/issues/${issueId}/`, { method: 'PUT', body });
-  return { success: true, action, issueId };
-}

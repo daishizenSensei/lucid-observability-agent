@@ -155,7 +155,8 @@ export function createObservabilityServer(env: Record<string, string | undefined
       toZodSchema(tool.params).shape,
       async (params: Record<string, unknown>) => {
         const result = await tool.execute(params);
-        return { content: [{ type: 'text' as const, text: result }] };
+        const isError = result.startsWith('Error: ');
+        return { content: [{ type: 'text' as const, text: result }], isError };
       },
     );
   }

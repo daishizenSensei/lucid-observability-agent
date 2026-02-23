@@ -2,33 +2,48 @@ import { Type, type TObject, type TSchema } from '@sinclair/typebox';
 import type { ToolParamDef } from '../core/tools/types.js';
 
 function paramToTypeBox(def: ToolParamDef): TSchema {
+  let schema: TSchema;
+
   switch (def.type) {
     case 'string':
-      return Type.String(def.description ? { description: def.description } : {});
+      schema = Type.String(def.description ? { description: def.description } : {});
+      break;
     case 'number': {
       const opts: Record<string, unknown> = {};
       if (def.description) opts.description = def.description;
       if (def.min !== undefined) opts.minimum = def.min;
       if (def.max !== undefined) opts.maximum = def.max;
-      return Type.Number(opts);
+      schema = Type.Number(opts);
+      break;
     }
     case 'boolean':
-      return Type.Boolean(def.description ? { description: def.description } : {});
+      schema = Type.Boolean(def.description ? { description: def.description } : {});
+      break;
     case 'enum':
-      return Type.Union(
+      schema = Type.Union(
         (def.values ?? []).map((v) => Type.Literal(v)),
         def.description ? { description: def.description } : {},
       );
+      break;
     case 'object':
       if (def.properties) {
-        return toTypeBoxSchema(def.properties);
+        schema = toTypeBoxSchema(def.properties);
+      } else {
+        schema = Type.Record(Type.String(), Type.Unknown());
       }
-      return Type.Record(Type.String(), Type.Unknown());
+      break;
     case 'array':
-      return Type.Array(def.items ? paramToTypeBox(def.items) : Type.Unknown());
+      schema = Type.Array(def.items ? paramToTypeBox(def.items) : Type.Unknown());
+      break;
     default:
-      return Type.Unknown();
+      schema = Type.Unknown();
   }
+
+  if (def.default !== undefined) {
+    schema = { ...schema, default: def.default };
+  }
+
+  return schema;
 }
 
 export function toTypeBoxSchema(params: Record<string, ToolParamDef>): TObject {

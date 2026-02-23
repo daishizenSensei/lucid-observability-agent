@@ -46,10 +46,13 @@ export function toZodSchema(params: Record<string, ToolParamDef>): z.ZodObject<a
   const shape: Record<string, z.ZodType> = {};
   for (const [key, def] of Object.entries(params)) {
     let fieldSchema = paramToZod(def);
+    if (def.required === false) {
+      fieldSchema = fieldSchema.optional();
+    }
     if (def.default !== undefined) {
       fieldSchema = (fieldSchema as any).default(def.default);
     }
-    shape[key] = def.required === false ? fieldSchema.optional() : fieldSchema;
+    shape[key] = fieldSchema;
   }
   return z.object(shape);
 }

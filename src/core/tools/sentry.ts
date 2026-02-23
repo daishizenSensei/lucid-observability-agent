@@ -280,8 +280,6 @@ export function createSentrySearchByTraceTool(deps: ToolDeps): ToolDefinition {
     params: {
       traceId: {
         type: 'string',
-        min: 16,
-        max: 32,
         description: 'OTel trace ID (32-char hex)',
       },
       project: {
