@@ -1,0 +1,22 @@
+{
+  "id": "lucid-observability",
+  "name": "Lucid Observability Agent",
+  "version": "3.0.0",
+  "description": "Sentry monitoring, root-cause diagnosis, billing pipeline health, incident runbooks",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "sentryAuthToken": { "type": "string" },
+      "sentryOrg": { "type": "string" },
+      "databaseUrl": { "type": "string" },
+      "configPath": { "type": "string" }
+    }
+  },
+  "uiHints": {
+    "sentryAuthToken": { "label": "Sentry Auth Token", "sensitive": true },
+    "sentryOrg": { "label": "Sentry Org Slug", "placeholder": "your-org" },
+    "databaseUrl": { "label": "PostgreSQL URL", "sensitive": true, "placeholder": "postgresql://..." },
+    "configPath": { "label": "Config File Path", "placeholder": "./config/lucid.json" }
+  }
+}
